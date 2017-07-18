@@ -10,6 +10,24 @@ from pyspark.ml.linalg import DenseVector
 from pyspark.sql import Row
 from functools import partial
 from pyspark.ml.regression import LinearRegression
+import HTMLParser
+import re, collections
+
+#remove symbols and numbers and convert to lower case
+def words(s):
+	h = HTMLParser.HTMLParser()
+	s=h.unescape(s)
+	s=re.sub('[?!\\.,\(\)#\"\']+',' ',s).strip()
+	s=re.sub('[ ]+[0-9]+[/]+[0-9]+[ ]+',' ',s)
+	s=re.sub('[ ]+[0-9]+[\-]+[0-9]+[ ]+',' ',s)
+	s=re.sub('[ ]+[0-9]+[\.]+[0-9]+[ ]+',' ',s)
+	s=re.sub('[ ]+[0-9]+[,]+[0-9]+[ ]+',' ',s)
+	s=re.sub('[\-]+',' ',s)
+	s=re.sub('[0-9]+',' ',s)
+	s=re.sub('([a-z]+)([A-Z]{1,1})([a-z]+)',r'\1 \2\3',s)
+	s=re.sub('\s+',' ',s)
+	return re.findall('[a-z]+', s.lower())
+	
 
 
 def fixEncoding(x):
@@ -60,22 +78,52 @@ def cleanData(row, model):
 def newFeatures(row):
     vector = row['tf_idf']
     data = row.asDict()
-    data['features'] = DenseVector([len(vector.indices), vector.values.min()])
+    data['features'] = DenseVector([len(vector.indices), vector.values.min(), vector.values.max()])
     newRow = Row(*data.keys())
     newRow = newRow(*data.values())
     return newRow
 
 
-def bidonFeature(row):
-    vector = row['product_description']
+def tfIdfAsNewFeatures(row):
+    vector = row['tf_idf']
+    data = row.asDict()    
+    data['features'] = DenseVector([len(vector.indices), vector.values.min(), vector.values.max(), vector.values.mean()])
+    newRow = Row(*data.keys())
+    newRow = newRow(*data.values())
+    return newRow
+
+def tfIdfAsNewFeaturesBis(row):
+    vector = row['tf_idf']
+    data = row.asDict()    
+    data['features'] = DenseVector(vector.toArray())
+    newRow = Row(*data.keys())
+    newRow = newRow(*data.values())
+    return newRow
+
+def enlargeToken(row):
+    vectorT = row['words_title']
+    vectorD = row['words_desc']
     data = row.asDict()
-    data['features'] = DenseVector([vector.size])
+    data['words'] = vectorT + vectorD
+    newRow = Row(*data.keys())
+    newRow = newRow(*data.values())
+    return newRow
+
+def enlargeTokenAndClean(row):
+    vectorT = row['words_title']
+    vectorD = row['words_desc']
+    data = row.asDict()
+    data['words'] = vectorT + vectorD
+    w=[]
+    for word in data['words']:
+        w += words(word)
+    data['wordsF'] = w
     newRow = Row(*data.keys())
     newRow = newRow(*data.values())
     return newRow
 
 
-sc = SparkContext(appName="Example1")
+sc = SparkContext.getOrCreate()
 
 sqlContext = HiveContext(sc)
 print "###############"
@@ -83,7 +131,7 @@ print "###############"
 data = sqlContext.read.format("com.databricks.spark.csv").\
     option("header", "true").\
     option("inferSchema", "true").\
-    load("/dssp/datacamp/train.csv").repartition(100)
+    load("train.csv").repartition(100)
 print "data loaded - head:"
 print data.head()
 print "################"
@@ -91,7 +139,7 @@ print "################"
 attributes = sqlContext.read.format("com.databricks.spark.csv").\
     option("header", "true").\
     option("inferSchema", "true").\
-    load("/dssp/datacamp/attributes.csv").repartition(100)
+    load("attributes.csv").repartition(100)
 
 print "attributes loaded - head:"
 print attributes.head()
@@ -100,7 +148,7 @@ print "################"
 product_description = sqlContext.read.format("com.databricks.spark.csv").\
     option("header", "true").\
     option("inferSchema", "true").\
-    load("/dssp/datacamp/product_descriptions_old.csv").repartition(100)
+    load("product_descriptions.csv").repartition(100)
 
 print "description loaded - head:"
 print product_description.head()
@@ -153,8 +201,23 @@ fulldata = tokenizer.transform(fulldata)
 print "Tokenized Title:"
 print fulldata.head()
 print "################"
+
+# Step 1 Prim: split text field into words
+tokenizer = Tokenizer(inputCol="product_description", outputCol="words_desc")
+fulldata = tokenizer.transform(fulldata)
+print "Tokenized Description:"
+print fulldata.head()
+print "################"
+
+#Merge product with words
+
+fulldata = sqlContext.createDataFrame(fulldata.rdd.map((enlargeTokenAndClean)))                      
+print "words enlarge with desc and title"
+print fulldata.head()
+print "################"                                    
+
 # Step 2: compute term frequencies
-hashingTF = HashingTF(inputCol="words_title", outputCol="tf")
+hashingTF = HashingTF(inputCol="wordsF", outputCol="tf")
 fulldata = hashingTF.transform(fulldata)
 print "TERM frequencies:"
 print fulldata.head()
@@ -168,7 +231,8 @@ print fulldata.head()
 print "################"
 
 # Step 4 new features column / rename old
-fulldata = sqlContext.createDataFrame(fulldata.rdd.map(bidonFeature))
+fulldata = sqlContext.createDataFrame(fulldata.rdd.map(addFeatureLen))
+fulldata = sqlContext.createDataFrame(fulldata.rdd.map(newFeatures))
 print "NEW features column :"
 print fulldata.head()
 print "################"
