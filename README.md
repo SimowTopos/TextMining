@@ -17,14 +17,14 @@ We tried with a 0 DenseVector :
   features=DenseVector([0.0, 0.0])
   We had this result :
   Mean Squared Error = 0.281658352253 
-  Which is less than the first one. We didn't succeed to intreprete thi result...It's probably due to some error in our code.
+  Which is less than the first one. We didn't succeed to intreprete this result...It's probably due to some error in our code.
   
 **New feature experimentaion**
 
 We tried with the word description and attribute.
 we computed the Mean Squared Error = 0.282793946361
 
-We saw a small improvement due probably to the information added by the desciption data which is better than the title
+We saw a small improvement due to probably the information added by the desciption data which is better than the title
 
 **Mixing features**
 
@@ -52,11 +52,11 @@ def enlargeTokenAndClean(row):
 ```
 
 The result was : **Mean Squared Error = 0.280816931591**
-We improved the score.
+We improved the score by this features engineering.
 
 **Changing the structure of the feature**
 
-We tried to add the mean value in the DenseVector. This list the a worst score :
+We tried to add the mean value in the DenseVector. This lead to a worst score :
 Mean Squared Error = 0.283601709652
 It wasn't a good idea as we add some noise to the feature...
 So we remove it for the next steps.
@@ -80,7 +80,7 @@ def enlargeTokenAndClean(row):
     return newRow
 ```
 
-The result was : Mean Squared Error = 0.286859147648....We probably miss something
+The result was : Mean Squared Error = 0.286859147648, wish is worst....We probably miss something
 
 **Conclusion**
 Our best score : **Mean Squared Error = 0.280816931591**
